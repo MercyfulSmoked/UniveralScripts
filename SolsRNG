@@ -1,0 +1,230 @@
+local Lib = loadstring(game:HttpGet('https://raw.githubusercontent.com/MercyfulSmoked/localhub/main/tester'))()
+local lp = game.Players.LocalPlayer
+local S = {
+    AutoCollect = false;
+    AutoRoll = false;
+    AUC = false;
+    AUL = false;
+}
+
+if not game.Workspace:FindFirstChild("safe") then
+    local p = Instance.new("Part", workspace)
+    p.Name = "safe"
+    p.CFrame = CFrame.new(425, 127, 108)
+    p.Size = Vector3.new(7, 5, 10)
+    p.Anchored = true
+end
+
+function NearestDropped()
+    local closestPart
+    local minDistance = math.huge
+    for _, part in ipairs(workspace.DroppedItems:GetChildren()) do
+        local distance
+        if part:IsA("Model") and part:FindFirstChild('Casing') then
+            distance = (lp.Character.HumanoidRootPart.Position - part.Casing.Position).magnitude
+        elseif part:IsA("UnionOperation") then
+            distance = (lp.Character.HumanoidRootPart.Position - part.Position).magnitude
+        end
+        if distance and distance < minDistance and part and part.Parent ~= nil then
+            closestPart = part
+            minDistance = distance
+        end
+    end
+    return closestPart
+end
+
+local function cancelPath()
+    if path then
+        path:Cancel()
+        path = nil
+    end
+end
+
+local function move(goto)
+    if not S.AutoCollect then
+        print("AutoCollect is disabled. Cancelling path.")
+        cancelPath()
+        return
+    end
+    
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    
+    if not hrp or not hum then
+        return
+    end
+    
+    local goal = goto.Position
+    
+    local path = game:GetService("PathfindingService"):CreatePath({
+        AgentCanJump = true,
+        WaypointSpacing = 0.5
+    })
+    
+    path:ComputeAsync(hrp.Position, goal)
+    local waypoints = path:GetWaypoints()
+    
+    if #waypoints > 0 then
+        for _, waypoint in ipairs(waypoints) do
+            if not S.AutoCollect then
+                cancelPath()
+                return
+            end
+
+            if waypoint.Action == Enum.PathWaypointAction.Jump then
+                if hum.FloorMaterial == Enum.Material.Air then
+                    repeat
+                        wait(0.1) 
+                    until hum.FloorMaterial ~= Enum.Material.Air
+                end
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            else
+                hum:MoveTo(waypoint.Position)
+                hum.MoveToFinished:Wait()
+            end
+        end
+    end
+end
+
+function functions_AutoCollect(t)
+    S.AutoCollect = t
+    if not t then
+        cancelPath()
+        return
+    end
+    
+    while task.wait() and S.AutoCollect do 
+        pcall(function()
+            local v = NearestDropped()
+            if v and v.Parent ~= nil and ((v:IsA("Model") and v:FindFirstChild("Casing") and v.Casing.Transparency ~= 1) or (v:IsA("UnionOperation") and v.Transparency ~= 1)) and ((v:IsA("Model") and v.Casing:FindFirstChild("ProximityPrompt")) or v:FindFirstChild("ProximityPrompt")) then
+                task.wait()
+                local distance = (v:IsA("Model") and v.Casing.Position or v.Position) - lp.Character.HumanoidRootPart.Position
+                if distance.Magnitude <= 5 then
+                    fireproximityprompt((v:IsA("Model") and v.Casing.ProximityPrompt) or v.ProximityPrompt)
+                else
+                    move((v:IsA("Model") and v.Casing.CFrame) or v.CFrame)
+                end
+            end
+        end)
+    end
+end
+
+function functions_AutoUseCoin(t)
+    S.AUC = t
+    if not t then
+        return
+    end
+    
+    while task.wait() and S.AUC do 
+        game:GetService("ReplicatedStorage").Modules.Inventory.UseItem:FireServer("Gilded Coin",1)
+        game:GetService("ReplicatedStorage").Modules.Inventory.UseItem:FireServer("Coin",1)
+    end
+end
+
+function functions_AutoUseLucky(t)
+    S.AUL = t
+    if not t then
+        return
+    end
+    
+    while task.wait() and S.AUL do 
+        game:GetService("ReplicatedStorage").Modules.Inventory.UseItem:FireServer("Lucky Potion",1)
+    end
+end
+
+function functions_Join()
+    local Http = game:GetService("HttpService")
+    local TPS = game:GetService("TeleportService")
+    local Api = "https://games.roblox.com/v1/games/"
+    local _place = game.PlaceId
+    local _servers = Api.._place.."/servers/Public?sortOrder=Asc&limit=100"
+    
+    function ListServers(cursor)
+        local Raw = game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
+        return Http:JSONDecode(Raw)
+    end
+
+    local Server, Next
+    repeat
+        local Servers = ListServers(Next)
+        Server = Servers.data[1]
+        Next = Servers.nextPageCursor
+    until Server
+
+    TPS:TeleportToPlaceInstance(_place, Server.id, lp)
+end
+
+local win = Lib:MakeWindow({
+    Name = "Sol's RNG",
+    HidePremium = true,
+    SaveConfig = true,
+    ConfigFolder = "Localscripts",
+    IntroText = "Local Hub"
+})
+
+local af = win:MakeTab({
+    Name = "Auto-Farm",
+    Icon = "",
+    PremiumOnly = false
+})
+
+local mm = win:MakeTab({
+    Name = "Misc",
+    Icon = "",
+    PremiumOnly = false
+})
+
+local dd = win:MakeTab({
+    Name = "Discord",
+    Icon = "",
+    PremiumOnly = false
+})
+
+af:AddToggle({
+    Name = "Auto Collect (Walk)",
+    Default = false,
+    Flag = "AK Farm",
+    Callback = functions_AutoCollect
+})
+
+mm:AddToggle({
+    Name = "Auto Use (Coins)",
+    Default = false,
+    Flag = "AUC Farm",
+    Callback = functions_AutoUseCoin
+})
+
+mm:AddToggle({
+    Name = "Auto Use (Lucky)",
+    Default = false,
+    Flag = "AUL Farm",
+    Callback = functions_AutoUseLucky
+})
+
+mm:AddButton({
+    Name = "Join low server",
+    Callback = functions_Join
+})
+
+dd:AddButton({Name = "Join Discord", Callback = function()
+    local INV_CODE = "W9Hw9BzVqv";
+    local httpService = game:GetService("HttpService")
+    local httpRequest = http_request
+
+    local request = httpRequest({
+        Url = "http://127.0.0.1:6463/rpc?v=1",
+        Method = "POST",
+
+        Headers = {
+            ['Content-Type'] = 'application/json',
+            Origin = 'https://discord.com'
+        },
+
+        Body = httpService:JSONEncode({
+            args = {code = INV_CODE},
+            cmd = 'INVITE_BROWSER',
+            nonce = httpService:GenerateGUID(false)
+        })
+    })
+end})
